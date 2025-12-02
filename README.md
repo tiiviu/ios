@@ -21,6 +21,7 @@
 - [Lesson 2 — SwiftUI Views, Layout & State](#lesson-2--swiftui-views-layout--state)
 - [Lesson 3 — Lists & Navigation](#lesson-3--lists--navigation)
 - [Lesson 4 — Forms, Images & Alerts](#lesson-4--forms-images--alerts)
+- [Lesson 5 — Data Models & Persistence](#lesson-5--data-models--persistence)
 
 ---
 
@@ -1037,3 +1038,419 @@ Create a multi-screen SwiftUI app for event registration:
 * Human Interface Guidelines for Forms
 
 ---
+
+# Lesson 5 — Data Models & Persistence
+
+<a id="goal-of-the-lesson-5"></a>
+## Goal of the lesson
+
+By the end of this lesson, the student should be able to:
+
+* Create data models using `struct` with `Identifiable`
+* Use `UserDefaults` to persist simple data
+* Create reusable custom views
+* Work with arrays of custom objects
+* Implement data persistence across app launches
+* Build apps with structured data
+
+---
+
+## 1. Data Models
+
+### Concept:
+
+> Data models represent structured information in your app. Use `struct` to create models that conform to `Identifiable` for use in lists.
+
+### Key points:
+
+* Use `struct` to define data models.
+* Conform to `Identifiable` protocol for use with `ForEach`.
+* Properties can have default values.
+* Models can contain computed properties.
+
+### Example:
+
+```swift
+struct Task: Identifiable {
+    let id = UUID()
+    var title: String
+    var isCompleted: Bool
+    var priority: Int
+    
+    init(title: String, isCompleted: Bool = false, priority: Int = 1) {
+        self.title = title
+        self.isCompleted = isCompleted
+        self.priority = priority
+    }
+}
+
+struct ContentView: View {
+    @State private var tasks = [
+        Task(title: "Buy groceries", priority: 2),
+        Task(title: "Finish homework", isCompleted: true, priority: 1)
+    ]
+    
+    var body: some View {
+        List {
+            ForEach(tasks) { task in
+                HStack {
+                    Text(task.title)
+                    Spacer()
+                    if task.isCompleted {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+---
+
+## 2. Working with Arrays of Models
+
+### Concept:
+
+> Arrays of models allow you to manage collections of structured data. You can add, remove, and modify items.
+
+### Key points:
+
+* Use arrays to store multiple model instances.
+* Modify arrays using methods like `append()`, `remove()`, `removeAll()`.
+* Use indices when you need to modify specific items.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var tasks: [Task] = []
+    @State private var newTaskTitle = ""
+    
+    var body: some View {
+        VStack {
+            HStack {
+                TextField("New task", text: $newTaskTitle)
+                Button("Add") {
+                    let task = Task(title: newTaskTitle)
+                    tasks.append(task)
+                    newTaskTitle = ""
+                }
+            }
+            .padding()
+            
+            List {
+                ForEach(tasks) { task in
+                    Text(task.title)
+                }
+                .onDelete(perform: deleteTasks)
+            }
+        }
+    }
+    
+    func deleteTasks(at offsets: IndexSet) {
+        tasks.remove(atOffsets: offsets)
+    }
+}
+```
+
+---
+
+## 3. UserDefaults
+
+### Concept:
+
+> `UserDefaults` is a simple way to persist small amounts of data. It's perfect for user preferences and settings.
+
+### Key points:
+
+* `UserDefaults.standard` is the main storage.
+* Use `set()` to save values.
+* Use methods like `string()`, `bool()`, `integer()` to retrieve values.
+* Data persists across app launches.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var username: String = ""
+    
+    var body: some View {
+        VStack {
+            TextField("Username", text: $username)
+                .textFieldStyle(.roundedBorder)
+                .padding()
+            
+            Button("Save") {
+                UserDefaults.standard.set(username, forKey: "username")
+            }
+            
+            Button("Load") {
+                username = UserDefaults.standard.string(forKey: "username") ?? ""
+            }
+        }
+        .onAppear {
+            username = UserDefaults.standard.string(forKey: "username") ?? ""
+        }
+    }
+}
+```
+
+---
+
+## 4. Saving Arrays to UserDefaults
+
+### Concept:
+
+> You can save arrays to UserDefaults by encoding them to Data using `JSONEncoder`, or by saving simple types directly.
+
+### Key points:
+
+* Simple arrays (String, Int, Bool) can be saved directly.
+* Complex objects need encoding with `Codable` protocol.
+* Use `JSONEncoder` and `JSONDecoder` for encoding/decoding.
+
+### Example:
+
+```swift
+struct Task: Identifiable, Codable {
+    let id = UUID()
+    var title: String
+    var isCompleted: Bool
+}
+
+struct ContentView: View {
+    @State private var tasks: [Task] = []
+    
+    var body: some View {
+        VStack {
+            // ... UI code ...
+        }
+        .onAppear {
+            loadTasks()
+        }
+    }
+    
+    func saveTasks() {
+        if let encoded = try? JSONEncoder().encode(tasks) {
+            UserDefaults.standard.set(encoded, forKey: "tasks")
+        }
+    }
+    
+    func loadTasks() {
+        if let data = UserDefaults.standard.data(forKey: "tasks"),
+           let decoded = try? JSONDecoder().decode([Task].self, from: data) {
+            tasks = decoded
+        }
+    }
+}
+```
+
+---
+
+## 5. Custom Views
+
+### Concept:
+
+> Custom views are reusable components you create. They help organize code and make it more maintainable.
+
+### Key points:
+
+* Create separate `struct` views for reusable components.
+* Pass data using initializer parameters.
+* Use `@Binding` when the view needs to modify parent data.
+
+### Example:
+
+```swift
+struct TaskRowView: View {
+    let task: Task
+    
+    var body: some View {
+        HStack {
+            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                .foregroundColor(task.isCompleted ? .green : .gray)
+            Text(task.title)
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct ContentView: View {
+    @State private var tasks: [Task] = []
+    
+    var body: some View {
+        List {
+            ForEach(tasks) { task in
+                TaskRowView(task: task)
+            }
+        }
+    }
+}
+```
+
+### Custom View with Binding:
+
+```swift
+struct TaskToggleView: View {
+    @Binding var task: Task
+    
+    var body: some View {
+        HStack {
+            Toggle("", isOn: $task.isCompleted)
+            Text(task.title)
+                .strikethrough(task.isCompleted)
+        }
+    }
+}
+```
+
+---
+
+## 6. Complete Example: Todo App with Persistence
+
+### Example:
+
+```swift
+struct Task: Identifiable, Codable {
+    let id = UUID()
+    var title: String
+    var isCompleted: Bool = false
+}
+
+struct TaskRowView: View {
+    @Binding var task: Task
+    
+    var body: some View {
+        HStack {
+            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                .foregroundColor(task.isCompleted ? .green : .gray)
+                .onTapGesture {
+                    task.isCompleted.toggle()
+                }
+            Text(task.title)
+                .strikethrough(task.isCompleted)
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct ContentView: View {
+    @State private var tasks: [Task] = []
+    @State private var newTaskTitle = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                HStack {
+                    TextField("New task", text: $newTaskTitle)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add") {
+                        let task = Task(title: newTaskTitle)
+                        tasks.append(task)
+                        newTaskTitle = ""
+                        saveTasks()
+                    }
+                    .disabled(newTaskTitle.isEmpty)
+                }
+                .padding()
+                
+                List {
+                    ForEach($tasks) { $task in
+                        TaskRowView(task: $task)
+                    }
+                    .onDelete { indexSet in
+                        tasks.remove(atOffsets: indexSet)
+                        saveTasks()
+                    }
+                }
+            }
+            .navigationTitle("Tasks")
+            .onAppear {
+                loadTasks()
+            }
+        }
+    }
+    
+    func saveTasks() {
+        if let encoded = try? JSONEncoder().encode(tasks) {
+            UserDefaults.standard.set(encoded, forKey: "tasks")
+        }
+    }
+    
+    func loadTasks() {
+        if let data = UserDefaults.standard.data(forKey: "tasks"),
+           let decoded = try? JSONDecoder().decode([Task].self, from: data) {
+            tasks = decoded
+        }
+    }
+}
+```
+
+---
+
+## 7. Homework — Notes App with Categories
+
+Create a SwiftUI app for managing notes with categories:
+
+### Requirements:
+
+1. Use: `NavigationView`, `List`, `Form`, `Section`, `TextField`, `Picker`, `Button`, `@State`, `@Binding`, `ForEach`, `UserDefaults`, Custom Views
+
+2. **Data Model**:
+   * Create a `Note` struct that conforms to `Identifiable` and `Codable`
+   * Properties: `id`, `title`, `content`, `category`, `createdDate`
+   * Create a `Category` enum or use String with predefined categories
+   * Categories: "Personal", "Work", "Shopping", "Ideas"
+
+3. **Screen 1: Notes List**:
+   * Display notes in a `List` organized by `Section` (group by category)
+   * Each section header should show category name with SF Symbol
+   * Each note row should show:
+     * Note title
+     * Category badge/icon
+     * Preview of content (first 50 characters)
+   * Use custom view `NoteRowView` for note rows
+   * Navigation title: "My Notes"
+   * Swipe-to-delete functionality
+
+4. **Screen 2: Add/Edit Note**:
+   * Use `Form` with sections:
+     * **Note Details**:
+       * TextField for title (required)
+       * TextField for content (multiline, optional)
+     * **Category**:
+       * Picker to select category
+   * "Save" button that:
+     * Validates title is not empty
+     * Shows Alert if validation fails
+     * Saves note and navigates back if successful
+   * Use `@Binding` to allow editing existing notes
+   * Navigation title: "New Note" or "Edit Note"
+
+5. **Screen 3: Note Detail** (Optional):
+   * Show full note content
+   * Display category and date
+   * "Edit" button that navigates to edit screen
+
+6. **Persistence**:
+   * Save notes array to `UserDefaults` using `JSONEncoder`
+   * Load notes on app launch using `JSONDecoder`
+   * Save automatically when notes are added, edited, or deleted
+
+7. **Custom Views**:
+   * Create `NoteRowView` for displaying notes in list
+   * Create `CategoryBadgeView` for displaying category with color
+   * Use SF Symbols for categories
+
+8. **Bonus Challenges**:
+   * Add search functionality to filter notes
+   * Show note count per category
+   * Add date formatting for createdDate
+   * Implement note editing with `@Binding`
+
+---
+
