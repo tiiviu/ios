@@ -22,6 +22,7 @@
 - [Lesson 3 — Lists & Navigation](#lesson-3--lists--navigation)
 - [Lesson 4 — Forms, Images & Alerts](#lesson-4--forms-images--alerts)
 - [Lesson 5 — Data Models & Persistence](#lesson-5--data-models--persistence)
+- [Lesson 6 — Advanced UI & Animations](#lesson-6--advanced-ui--animations)
 
 ---
 
@@ -1451,6 +1452,469 @@ Create a SwiftUI app for managing notes with categories:
    * Show note count per category
    * Add date formatting for createdDate
    * Implement note editing with `@Binding`
+
+---
+
+## 8. Resources
+
+* Apple Docs: UserDefaults
+* Swift Codable documentation
+* SwiftUI Custom Views guide
+* Data persistence best practices
+
+---
+
+# Lesson 6 — Advanced UI & Animations
+
+<a id="goal-of-the-lesson-6"></a>
+## Goal of the lesson
+
+By the end of this lesson, the student should be able to:
+
+* Use `TabView` to create multi-screen apps with tabs
+* Implement `ScrollView` for scrollable content
+* Add basic animations to views
+* Work with dates and formatting
+* Create smooth transitions between states
+* Build polished, animated user interfaces
+
+---
+
+## 1. TabView
+
+### Concept:
+
+> `TabView` creates a tab bar interface with multiple screens. Each tab represents a different section of your app.
+
+### Key points:
+
+* Use `TabView` as the root container.
+* Each tab is defined with `.tabItem()` modifier.
+* Tabs can have SF Symbols and labels.
+* Use `@State` to track selected tab if needed.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        TabView {
+            HomeView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+            
+            SearchView()
+                .tabItem {
+                    Label("Search", systemImage: "magnifyingglass")
+                }
+            
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person.fill")
+                }
+        }
+    }
+}
+
+struct HomeView: View {
+    var body: some View {
+        NavigationView {
+            Text("Home Screen")
+                .navigationTitle("Home")
+        }
+    }
+}
+```
+
+---
+
+## 2. ScrollView
+
+### Concept:
+
+> `ScrollView` creates a scrollable container for content that exceeds the screen size. Use it when content is larger than the viewport.
+
+### Key points:
+
+* `ScrollView` automatically handles scrolling.
+* Use `.vertical` (default) or `.horizontal` axis.
+* Combine with `VStack` or `HStack` for layout.
+* Use `LazyVStack` for better performance with many items.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                ForEach(1...50, id: \.self) { number in
+                    Text("Item \(number)")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+            .padding()
+        }
+    }
+}
+```
+
+### Horizontal ScrollView:
+
+```swift
+ScrollView(.horizontal, showsIndicators: false) {
+    HStack(spacing: 15) {
+        ForEach(items, id: \.self) { item in
+            CardView(item: item)
+        }
+    }
+    .padding()
+}
+```
+
+---
+
+## 3. Basic Animations
+
+### Concept:
+
+> Animations make UI changes smooth and visually appealing. SwiftUI provides easy ways to animate state changes.
+
+### Key points:
+
+* Use `.animation()` modifier to animate changes.
+* Use `.withAnimation()` for programmatic animations.
+* Common animation types: `.easeInOut`, `.spring()`, `.linear`.
+* Animations apply to state changes.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var isExpanded = false
+    @State private var scale: CGFloat = 1.0
+    
+    var body: some View {
+        VStack(spacing: 30) {
+            // Animated size change
+            Rectangle()
+                .fill(Color.blue)
+                .frame(width: isExpanded ? 200 : 100,
+                       height: isExpanded ? 200 : 100)
+                .animation(.easeInOut(duration: 0.5), value: isExpanded)
+            
+            // Animated scale
+            Circle()
+                .fill(Color.red)
+                .frame(width: 100, height: 100)
+                .scaleEffect(scale)
+                .animation(.spring(response: 0.5), value: scale)
+            
+            Button("Animate") {
+                isExpanded.toggle()
+                scale = scale == 1.0 ? 1.5 : 1.0
+            }
+        }
+        .padding()
+    }
+}
+```
+
+### Spring Animation:
+
+```swift
+struct ContentView: View {
+    @State private var offset: CGFloat = 0
+    
+    var body: some View {
+        VStack {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 50, height: 50)
+                .offset(y: offset)
+                .animation(.spring(response: 0.6, dampingFraction: 0.6), value: offset)
+            
+            Button("Move") {
+                offset = offset == 0 ? 200 : 0
+            }
+        }
+    }
+}
+```
+
+---
+
+## 4. Conditional Animations
+
+### Concept:
+
+> You can conditionally apply animations and create smooth transitions between different states.
+
+### Key points:
+
+* Use `if-else` with animated views.
+* Apply `.transition()` modifier for enter/exit animations.
+* Use `.animation()` on the container.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var showDetails = false
+    
+    var body: some View {
+        VStack {
+            Button("Toggle Details") {
+                withAnimation(.spring()) {
+                    showDetails.toggle()
+                }
+            }
+            
+            if showDetails {
+                VStack {
+                    Text("Details")
+                        .font(.title)
+                    Text("This is additional information")
+                }
+                .padding()
+                .background(Color.yellow.opacity(0.3))
+                .cornerRadius(12)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding()
+    }
+}
+```
+
+---
+
+## 5. Working with Dates
+
+### Concept:
+
+> Swift provides `Date` type and `DateFormatter` for working with dates. Use them to display and format dates in your app.
+
+### Key points:
+
+* `Date()` gets current date and time.
+* Use `DateFormatter` to format dates as strings.
+* Common date formats: "MMM d, yyyy", "HH:mm", "EEEE, MMMM d".
+
+### Example:
+
+```swift
+struct ContentView: View {
+    let date = Date()
+    
+    var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        formatter.timeStyle = .short
+        return formatter
+    }
+    
+    var shortDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Current Date")
+                .font(.title)
+            
+            Text(dateFormatter.string(from: date))
+            
+            Text(shortDateFormatter.string(from: date))
+                .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+}
+```
+
+### Relative Date Formatting:
+
+```swift
+struct ContentView: View {
+    let pastDate = Date().addingTimeInterval(-3600) // 1 hour ago
+    
+    var body: some View {
+        VStack {
+            Text("Posted")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(pastDate, style: .relative)
+                .font(.headline)
+        }
+    }
+}
+```
+
+---
+
+## 6. Complete Example: Animated Task Manager
+
+### Example:
+
+```swift
+struct Task: Identifiable {
+    let id = UUID()
+    var title: String
+    var isCompleted: Bool = false
+    var dueDate: Date
+}
+
+struct ContentView: View {
+    @State private var tasks: [Task] = [
+        Task(title: "Buy groceries", dueDate: Date()),
+        Task(title: "Finish project", dueDate: Date().addingTimeInterval(86400))
+    ]
+    @State private var showAddTask = false
+    
+    var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach($tasks) { $task in
+                        TaskCardView(task: $task, dateFormatter: dateFormatter)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Tasks")
+            .toolbar {
+                Button {
+                    withAnimation(.spring()) {
+                        showAddTask.toggle()
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+            .sheet(isPresented: $showAddTask) {
+                AddTaskView(tasks: $tasks)
+            }
+        }
+    }
+}
+
+struct TaskCardView: View {
+    @Binding var task: Task
+    let dateFormatter: DateFormatter
+    
+    var body: some View {
+        HStack {
+            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                .foregroundColor(task.isCompleted ? .green : .gray)
+                .onTapGesture {
+                    withAnimation(.spring()) {
+                        task.isCompleted.toggle()
+                    }
+                }
+            
+            VStack(alignment: .leading) {
+                Text(task.title)
+                    .strikethrough(task.isCompleted)
+                Text(dateFormatter.string(from: task.dueDate))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(task.isCompleted ? Color.green.opacity(0.1) : Color.blue.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+```
+
+---
+
+## 7. Homework — Personal Finance Tracker
+
+Create a SwiftUI app for tracking personal expenses:
+
+### Requirements:
+
+1. Use: `TabView`, `ScrollView`, `List`, `Form`, `Section`, `TextField`, `Picker`, `Stepper`, `Button`, `@State`, `@Binding`, `ForEach`, `Date`, animations
+
+2. **TabView Structure** (3 tabs):
+   * **Expenses Tab**:
+     * List of expenses with ScrollView
+     * Each expense shows: amount, category icon, description, date
+     * Swipe-to-delete with animation
+     * Total expenses displayed at top
+   * **Add Expense Tab**:
+     * Form with sections:
+       * Amount (TextField with number input)
+       * Category (Picker: Food, Transport, Shopping, Entertainment, Other)
+       * Description (TextField)
+       * Date (Date picker or show formatted current date)
+     * "Add" button with validation
+     * Show Alert on success
+   * **Statistics Tab**:
+     * Show total expenses
+     * Show expenses by category (use ScrollView with cards)
+     * Animated numbers when values change
+
+3. **Data Model**:
+   * Create `Expense` struct: `id`, `amount`, `category`, `description`, `date`
+   * Conform to `Identifiable` and `Codable`
+   * Save to UserDefaults
+
+4. **Animations**:
+   * Animate expense cards when added/removed
+   * Animate category cards in statistics
+   * Smooth transitions between tabs
+   * Animate total amount changes
+
+5. **Date Formatting**:
+   * Display dates in readable format (e.g., "Jan 15, 2024")
+   * Group expenses by date in list (use Section with date headers)
+   * Show relative dates (e.g., "Today", "Yesterday")
+
+6. **Custom Views**:
+   * Create `ExpenseCardView` for displaying expenses
+   * Create `CategoryCardView` for statistics
+   * Use SF Symbols for categories with colors
+
+7. **Visual Requirements**:
+   * Use ScrollView for expense list
+   * Color-code categories
+   * Smooth animations throughout
+   * Clean, modern UI with proper spacing
+
+8. **Bonus Challenges**:
+   * Add filtering by category
+   * Show monthly/weekly totals
+   * Add edit functionality for expenses
+   * Implement search functionality
+   * Add charts or visual representations
+
+---
+
+## 8. Resources
+
+* Apple Docs: TabView
+* SwiftUI Animations guide
+* Date and DateFormatter documentation
+* ScrollView best practices
+* Human Interface Guidelines for animations
 
 ---
 
