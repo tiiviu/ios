@@ -23,6 +23,7 @@
 - [Lesson 4 — Forms, Images & Alerts](#lesson-4--forms-images--alerts)
 - [Lesson 5 — Data Models & Persistence](#lesson-5--data-models--persistence)
 - [Lesson 6 — Advanced UI & Animations](#lesson-6--advanced-ui--animations)
+- [Lesson 7 — Networking & Async Operations](#lesson-7--networking--async-operations)
 
 ---
 
@@ -1915,6 +1916,537 @@ Create a SwiftUI app for tracking personal expenses:
 * Date and DateFormatter documentation
 * ScrollView best practices
 * Human Interface Guidelines for animations
+
+---
+
+# Lesson 7 — Networking & Async Operations
+
+<a id="goal-of-the-lesson-7"></a>
+## Goal of the lesson
+
+By the end of this lesson, the student should be able to:
+
+* Make network requests using `URLSession`
+* Use `async/await` for asynchronous operations
+* Handle loading and error states
+* Parse JSON data into Swift models
+* Display data from APIs in SwiftUI views
+* Create reusable networking code
+
+---
+
+## 1. Async/Await Basics
+
+### Concept:
+
+> `async/await` allows you to write asynchronous code that looks like synchronous code. Use it for network requests and other time-consuming operations.
+
+### Key points:
+
+* Mark functions with `async` keyword.
+* Use `await` to call async functions.
+* Async functions can throw errors.
+* Use `Task` to call async functions from synchronous contexts.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var data: String = "Loading..."
+    
+    var body: some View {
+        VStack {
+            Text(data)
+        }
+        .task {
+            await loadData()
+        }
+    }
+    
+    func loadData() async {
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        data = "Data loaded!"
+    }
+}
+```
+
+---
+
+## 2. URLSession and Network Requests
+
+### Concept:
+
+> `URLSession` is used to make HTTP requests. Combine it with `async/await` to fetch data from APIs.
+
+### Key points:
+
+* Create URL from string.
+* Use `URLSession.shared.data(from:)` for GET requests.
+* Handle errors with `do-catch`.
+* Decode JSON data using `JSONDecoder`.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var quote: String = "Loading..."
+    @State private var isLoading = true
+    
+    var body: some View {
+        VStack {
+            if isLoading {
+                ProgressView()
+            } else {
+                Text(quote)
+                    .font(.title)
+                    .padding()
+            }
+        }
+        .task {
+            await fetchQuote()
+        }
+    }
+    
+    func fetchQuote() async {
+        isLoading = true
+        guard let url = URL(string: "https://api.quotable.io/random") else {
+            quote = "Invalid URL"
+            isLoading = false
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let quoteData = try JSONDecoder().decode(QuoteResponse.self, from: data)
+            quote = quoteData.content
+            isLoading = false
+        } catch {
+            quote = "Error: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+}
+
+struct QuoteResponse: Codable {
+    let content: String
+    let author: String
+}
+```
+
+---
+
+## 3. Loading and Error States
+
+### Concept:
+
+> Always handle loading and error states when making network requests. Show appropriate UI for each state.
+
+### Key points:
+
+* Use `@State` to track loading state.
+* Use `@State` to track errors.
+* Show loading indicator during requests.
+* Display error messages to users.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var users: [User] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView("Loading users...")
+                } else if let error = errorMessage {
+                    VStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.red)
+                        Text(error)
+                            .foregroundColor(.secondary)
+                        Button("Retry") {
+                            Task {
+                                await loadUsers()
+                            }
+                        }
+                    }
+                } else {
+                    List(users) { user in
+                        Text(user.name)
+                    }
+                }
+            }
+            .navigationTitle("Users")
+            .task {
+                await loadUsers()
+            }
+        }
+    }
+    
+    func loadUsers() async {
+        isLoading = true
+        errorMessage = nil
+        
+        guard let url = URL(string: "https://jsonplaceholder.typicode.com/users") else {
+            errorMessage = "Invalid URL"
+            isLoading = false
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            users = try JSONDecoder().decode([User].self, from: data)
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to load users: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+}
+
+struct User: Identifiable, Codable {
+    let id: Int
+    let name: String
+    let email: String
+}
+```
+
+---
+
+## 4. AsyncImage
+
+### Concept:
+
+> `AsyncImage` automatically loads images from URLs. It handles loading states and errors automatically.
+
+### Key points:
+
+* `AsyncImage` loads images asynchronously.
+* Automatically shows placeholder while loading.
+* Handles errors gracefully.
+* Can customize placeholder and error views.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Basic usage
+                AsyncImage(url: URL(string: "https://picsum.photos/200"))
+                
+                // With placeholder
+                AsyncImage(url: URL(string: "https://picsum.photos/200")) { image in
+                    image
+                        .resizable()
+                        .scaledToFit()
+                } placeholder: {
+                    ProgressView()
+                }
+                .frame(width: 200, height: 200)
+                
+                // With error handling
+                AsyncImage(url: URL(string: "https://picsum.photos/200")) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure:
+                        Image(systemName: "photo")
+                            .foregroundColor(.gray)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(width: 200, height: 200)
+            }
+            .padding()
+        }
+    }
+}
+```
+
+---
+
+## 5. Refreshing Data
+
+### Concept:
+
+> Allow users to refresh data by pulling down on a list or tapping a refresh button.
+
+### Key points:
+
+* Use `.refreshable()` modifier for pull-to-refresh.
+* Use `@State` to track refresh state.
+* Show loading indicator during refresh.
+
+### Example:
+
+```swift
+struct ContentView: View {
+    @State private var posts: [Post] = []
+    
+    var body: some View {
+        NavigationView {
+            List(posts) { post in
+                VStack(alignment: .leading) {
+                    Text(post.title)
+                        .font(.headline)
+                    Text(post.body)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Posts")
+            .refreshable {
+                await loadPosts()
+            }
+            .task {
+                await loadPosts()
+            }
+        }
+    }
+    
+    func loadPosts() async {
+        guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else { return }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            posts = try JSONDecoder().decode([Post].self, from: data)
+        } catch {
+            print("Error: \(error)")
+        }
+    }
+}
+
+struct Post: Identifiable, Codable {
+    let id: Int
+    let title: String
+    let body: String
+}
+```
+
+---
+
+## 6. Complete Example: News Reader App
+
+### Example:
+
+```swift
+struct Article: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let description: String
+    let urlToImage: String?
+    let publishedAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case title, description
+        case urlToImage
+        case publishedAt
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        urlToImage = try container.decodeIfPresent(String.self, forKey: .urlToImage)
+        publishedAt = try container.decode(String.self, forKey: .publishedAt)
+        id = UUID()
+    }
+}
+
+struct NewsResponse: Codable {
+    let articles: [Article]
+}
+
+struct ContentView: View {
+    @State private var articles: [Article] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView("Loading news...")
+                } else if let error = errorMessage {
+                    ErrorView(message: error) {
+                        Task {
+                            await loadNews()
+                        }
+                    }
+                } else {
+                    List(articles) { article in
+                        ArticleRowView(article: article)
+                    }
+                    .refreshable {
+                        await loadNews()
+                    }
+                }
+            }
+            .navigationTitle("News")
+            .task {
+                await loadNews()
+            }
+        }
+    }
+    
+    func loadNews() async {
+        isLoading = true
+        errorMessage = nil
+        
+        // Note: Replace with actual API key
+        guard let url = URL(string: "https://newsapi.org/v2/top-headlines?country=us&apiKey=YOUR_API_KEY") else {
+            errorMessage = "Invalid URL"
+            isLoading = false
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let response = try JSONDecoder().decode(NewsResponse.self, from: data)
+            articles = response.articles
+            isLoading = false
+        } catch {
+            errorMessage = "Failed to load news: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+}
+
+struct ArticleRowView: View {
+    let article: Article
+    
+    var body: some View {
+        HStack {
+            AsyncImage(url: URL(string: article.urlToImage ?? "")) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    Image(systemName: "photo")
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .frame(width: 80, height: 80)
+            .clipped()
+            .cornerRadius(8)
+            
+            VStack(alignment: .leading) {
+                Text(article.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                Text(article.description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+}
+
+struct ErrorView: View {
+    let message: String
+    let onRetry: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundColor(.red)
+            Text(message)
+                .foregroundColor(.secondary)
+            Button("Retry", action: onRetry)
+        }
+        .padding()
+    }
+}
+```
+
+---
+
+## 7. Homework — Weather App
+
+Create a SwiftUI app that displays weather information:
+
+### Requirements:
+
+1. Use: `URLSession`, `async/await`, `AsyncImage`, `@State`, `List`, `ScrollView`, loading states, error handling
+
+2. **Data Model**:
+   * Create `Weather` struct with properties: `temperature`, `condition`, `city`, `humidity`, `windSpeed`
+   * Conform to `Codable` for JSON decoding
+   * Handle API response structure
+
+3. **Main Screen**:
+   * Display current weather for a city
+   * Show: temperature, condition, city name, humidity, wind speed
+   * Use `AsyncImage` to display weather icon (from API or SF Symbol based on condition)
+   * Show loading state while fetching data
+   * Show error state with retry button if request fails
+
+4. **Search Functionality**:
+   * TextField to search for different cities
+   * "Search" button to fetch weather for entered city
+   * Validate input (show alert if city name is empty)
+   * Clear previous data while loading new city
+
+5. **Weather Details**:
+   * Use ScrollView for scrollable content
+   * Display weather information in cards/sections
+   * Format temperature with degree symbol
+   * Show condition with appropriate SF Symbol
+   * Use colors based on weather condition (e.g., blue for cold, orange for warm)
+
+6. **Error Handling**:
+   * Handle network errors gracefully
+   * Show user-friendly error messages
+   * Provide retry functionality
+   * Handle invalid city names
+
+7. **API Integration**:
+   * Use free weather API (e.g., OpenWeatherMap, WeatherAPI)
+   * Make GET request to fetch weather data
+   * Parse JSON response into Weather model
+   * Handle API errors and edge cases
+
+8. **Visual Requirements**:
+   * Clean, modern UI
+   * Use appropriate colors and icons
+   * Smooth loading transitions
+   * Responsive layout
+
+9. **Bonus Challenges**:
+   * Add multiple cities support (list of favorite cities)
+   * Save favorite cities to UserDefaults
+   * Add pull-to-refresh functionality
+   * Show weather forecast for next few days
+   * Add location-based weather (if time permits)
+
+---
+
+## 8. Resources
+
+* Apple Docs: URLSession
+* Swift Concurrency (async/await) documentation
+* AsyncImage guide
+* JSON decoding with Codable
+* Free Weather APIs: OpenWeatherMap, WeatherAPI
 
 ---
 
