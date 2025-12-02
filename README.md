@@ -1842,6 +1842,54 @@ struct TaskCardView: View {
         .cornerRadius(12)
     }
 }
+
+struct AddTaskView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var tasks: [Task]
+
+    @State private var title: String = ""
+    @State private var dueDate: Date = Date()
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Task Info")) {
+                    TextField("Title", text: $title)
+
+                    DatePicker("Due Date",
+                               selection: $dueDate,
+                               displayedComponents: .date)
+                }
+            }
+            .navigationTitle("New Task")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addTask()
+                    }
+                    .disabled(title.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func addTask() {
+        let newTask = Task(title: title, dueDate: dueDate)
+
+        withAnimation(.spring()) {
+            tasks.append(newTask)
+        }
+
+        dismiss()
+    }
+}
+
 ```
 
 ---
@@ -1990,7 +2038,7 @@ struct ContentView: View {
 
 ```swift
 struct ContentView: View {
-    @State private var quote: String = "Loading..."
+    @State private var postTitle: String = "Loading..."
     @State private var isLoading = true
     
     var body: some View {
@@ -1998,39 +2046,42 @@ struct ContentView: View {
             if isLoading {
                 ProgressView()
             } else {
-                Text(quote)
+                Text(postTitle)
                     .font(.title)
                     .padding()
             }
         }
         .task {
-            await fetchQuote()
+            await fetchPost()
         }
     }
     
-    func fetchQuote() async {
+    func fetchPost() async {
         isLoading = true
-        guard let url = URL(string: "https://api.quotable.io/random") else {
-            quote = "Invalid URL"
+
+        guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts/1") else {
+            postTitle = "Invalid URL"
             isLoading = false
             return
         }
         
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            let quoteData = try JSONDecoder().decode(QuoteResponse.self, from: data)
-            quote = quoteData.content
+            let postData = try JSONDecoder().decode(PostResponse.self, from: data)
+            postTitle = postData.title
             isLoading = false
         } catch {
-            quote = "Error: \(error.localizedDescription)"
+            postTitle = "Error: \(error.localizedDescription)"
             isLoading = false
         }
     }
 }
 
-struct QuoteResponse: Codable {
-    let content: String
-    let author: String
+struct PostResponse: Codable {
+    let userId: Int
+    let id: Int
+    let title: String
+    let body: String
 }
 ```
 
@@ -2244,23 +2295,24 @@ struct Post: Identifiable, Codable {
 ```swift
 struct Article: Identifiable, Codable {
     let id: UUID
-    let title: String
-    let description: String
+    let title: String?
+    let description: String?
     let urlToImage: String?
-    let publishedAt: String
+    let publishedAt: String?
     
     enum CodingKeys: String, CodingKey {
-        case title, description
+        case title
+        case description
         case urlToImage
         case publishedAt
     }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        title = try container.decode(String.self, forKey: .title)
-        description = try container.decode(String.self, forKey: .description)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
         urlToImage = try container.decodeIfPresent(String.self, forKey: .urlToImage)
-        publishedAt = try container.decode(String.self, forKey: .publishedAt)
+        publishedAt = try container.decodeIfPresent(String.self, forKey: .publishedAt)
         id = UUID()
     }
 }
@@ -2348,10 +2400,10 @@ struct ArticleRowView: View {
             .cornerRadius(8)
             
             VStack(alignment: .leading) {
-                Text(article.title)
+                Text(article.title ?? "No title")
                     .font(.headline)
                     .lineLimit(2)
-                Text(article.description)
+                Text(article.description ?? "No description")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
