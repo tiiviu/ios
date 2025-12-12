@@ -24,6 +24,7 @@
 - [Lesson 5 — Data Models & Persistence](#lesson-5--data-models--persistence)
 - [Lesson 6 — Advanced UI & Animations](#lesson-6--advanced-ui--animations)
 - [Lesson 7 — Networking & Async Operations](#lesson-7--networking--async-operations)
+- [Lesson 8 — MVVM Architecture & Code Quality](#lesson-8--mvvm-architecture--code-quality)
 
 ---
 
@@ -2502,3 +2503,408 @@ Create a SwiftUI app that displays weather information:
 
 ---
 
+# Lesson 8 — MVVM Architecture & Code Quality
+
+<a id="goal-of-the-lesson-8"></a>
+## Goal of the lesson
+
+By the end of this lesson, the student should be able to:
+
+* Understand MVVM (Model-View-ViewModel) architecture pattern
+* Implement `ObservableObject` and `@Published` properties
+* Separate business logic from UI using ViewModels
+* Set up and use SwiftLint for code quality
+* Add external dependencies using Swift Package Manager
+* Use third-party networking libraries (e.g., Alamofire)
+* Write maintainable, testable, and scalable code
+
+---
+
+## 1. MVVM Architecture
+
+### Concept:
+
+> MVVM (Model-View-ViewModel) separates your app into three layers:
+> - **Model**: Data structures and business logic
+> - **View**: UI components (SwiftUI views)
+> - **ViewModel**: Connects Model and View, handles business logic and state
+
+### Key points:
+
+* Views should only handle UI presentation.
+* ViewModels contain business logic and state management.
+* Models represent data structures.
+* ViewModels use `ObservableObject` protocol.
+* Views observe ViewModels using `@StateObject` or `@ObservedObject`.
+
+### Architecture Diagram:
+
+```
+┌─────────┐         ┌──────────────┐         ┌─────────┐
+│  View   │ ◄─────  │  ViewModel   │ ◄─────  │  Model  │
+│ (UI)    │         │ (Logic/State)│         │ (Data)  │
+└─────────┘         └──────────────┘         └─────────┘
+```
+
+---
+
+## 2. ObservableObject and @Published
+
+### Concept:
+
+> `ObservableObject` allows objects to notify views when their properties change. Use `@Published` to mark properties that should trigger UI updates.
+
+### Key points:
+
+* Conform ViewModel to `ObservableObject`.
+* Use `@Published` for properties that should update UI.
+* Views automatically update when `@Published` properties change.
+* Use `@StateObject` for view-owned ViewModels.
+* Use `@ObservedObject` for passed ViewModels.
+
+### Example:
+
+```swift
+import Foundation
+import Combine
+
+// Model
+struct Task: Identifiable {
+    let id = UUID()
+    var title: String
+    var isCompleted: Bool
+}
+
+// ViewModel
+class TaskViewModel: ObservableObject {
+    @Published var tasks: [Task] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    func addTask(title: String) {
+        let task = Task(title: title)
+        tasks.append(task)
+    }
+    
+    func toggleTask(_ task: Task) {
+        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+            tasks[index].isCompleted.toggle()
+        }
+    }
+    
+    func deleteTask(at offsets: IndexSet) {
+        tasks.remove(atOffsets: offsets)
+    }
+}
+
+// View
+struct ContentView: View {
+    @StateObject private var viewModel = TaskViewModel()
+    @State private var newTaskTitle = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                HStack {
+                    TextField("New task", text: $newTaskTitle)
+                    Button("Add") {
+                        viewModel.addTask(title: newTaskTitle)
+                        newTaskTitle = ""
+                    }
+                }
+                .padding()
+                
+                List {
+                    ForEach(viewModel.tasks) { task in
+                        HStack {
+                            Text(task.title)
+                            Spacer()
+                            Image(systemName: task.isCompleted ? "checkmark" : "circle")
+                        }
+                        .onTapGesture {
+                            viewModel.toggleTask(task)
+                        }
+                    }
+                    .onDelete(perform: viewModel.deleteTask)
+                }
+            }
+            .navigationTitle("Tasks")
+        }
+    }
+}
+```
+
+---
+
+## 3. ViewModel with Network Requests
+
+### Concept:
+
+> ViewModels handle network requests and data fetching. Keep networking logic separate from views.
+
+### Key points:
+
+* Move network code to ViewModel.
+* Use `@Published` to update UI when data loads.
+* Handle errors in ViewModel.
+* Views observe ViewModel state.
+* Use `MainActor` to ensure UI updates happen on the main thread.
+
+### MainActor:
+
+> `MainActor` ensures that code runs on the main thread, which is required for UI updates. When updating `@Published` properties from async functions, use `await MainActor.run { }` to switch to the main thread.
+
+### Example:
+
+```swift
+import Foundation
+
+// Model
+struct User: Identifiable, Codable {
+    let id: Int
+    let name: String
+    let email: String
+}
+
+// ViewModel
+class UserViewModel: ObservableObject {
+    @Published var users: [User] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    func loadUsers() async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        guard let url = URL(string: "https://jsonplaceholder.typicode.com/users") else {
+            await MainActor.run {
+                errorMessage = "Invalid URL"
+                isLoading = false
+            }
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decodedUsers = try JSONDecoder().decode([User].self, from: data)
+            
+            await MainActor.run {
+                users = decodedUsers
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load users: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+}
+
+// View
+struct UserListView: View {
+    @StateObject private var viewModel = UserViewModel()
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if viewModel.isLoading {
+                    ProgressView("Loading...")
+                } else if let error = viewModel.errorMessage {
+                    VStack {
+                        Text("Error: \(error)")
+                        Button("Retry") {
+                            Task {
+                                await viewModel.loadUsers()
+                            }
+                        }
+                    }
+                } else {
+                    List(viewModel.users) { user in
+                        VStack(alignment: .leading) {
+                            Text(user.name)
+                                .font(.headline)
+                            Text(user.email)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Users")
+            .task {
+                await viewModel.loadUsers()
+            }
+        }
+    }
+}
+```
+
+---
+
+## 4. Swift Package Manager
+
+### Concept:
+
+> Swift Package Manager (SPM) is Apple's official tool for managing external dependencies. It allows you to add third-party libraries and frameworks to your project.
+
+### Key points:
+
+* SPM is built into Xcode.
+* Add packages via File → Add Packages...
+* SPM automatically downloads and manages dependencies.
+* Dependencies are resolved and updated automatically.
+* No need for external tools like CocoaPods or Carthage.
+
+### Why use SPM:
+
+* Easy integration of external libraries.
+* Automatic dependency management.
+* Version control for dependencies.
+* Native Xcode support.
+
+---
+
+## 5. External Frameworks
+
+### Concept:
+
+> External frameworks are third-party libraries that provide additional functionality. They can simplify common tasks like networking, image loading, or data parsing.
+
+### Why use frameworks:
+
+* **Simplify complex tasks**: Frameworks provide ready-made solutions for common problems.
+* **Save development time**: Don't reinvent the wheel.
+* **Well-tested code**: Popular frameworks are used by thousands of developers.
+* **Better APIs**: Frameworks often provide cleaner, more intuitive APIs than native solutions.
+
+### Popular networking frameworks:
+
+* **Alamofire**: Simplifies HTTP networking with a chainable API.
+* **Moya**: Type-safe networking layer built on Alamofire.
+* **URLSession**: Native Apple solution (no external dependency needed).
+
+### Example use case:
+
+Instead of writing complex URLSession code, you can use Alamofire for cleaner, more readable network requests. The choice of framework depends on your project needs and team preferences.
+
+---
+
+## 6. Code Quality Tools
+
+### Concept:
+
+> Code quality tools help maintain consistent code style and catch potential issues. They enforce best practices and improve code readability.
+
+### SwiftLint:
+
+> SwiftLint is a tool that enforces Swift style and conventions. It analyzes your code and reports style violations and potential issues.
+
+### Key points:
+
+* Enforces Swift style guidelines.
+* Catches common mistakes and code smells.
+* Configurable via `.swiftlint.yml` file.
+* Can be integrated into Xcode build process.
+* Helps maintain consistent code across team projects.
+
+### Why use code quality tools:
+
+* **Consistency**: Ensures all code follows the same style.
+* **Early detection**: Catches issues before code review.
+* **Learning**: Helps developers learn best practices.
+* **Team collaboration**: Makes code reviews easier.
+
+---
+
+## 7. Homework — Refactor Weather App to MVVM
+
+Refactor your Weather App from Lesson 7 to use MVVM architecture, integrate SwiftLint, and add an external networking framework:
+
+### Requirements:
+
+1. **Architecture Refactoring**:
+   * Separate code into Model, View, and ViewModel layers
+   * Create `WeatherViewModel` that conforms to `ObservableObject`
+   * Move all business logic and network code to ViewModel
+   * Views should only handle UI presentation
+   * Use `@StateObject` for ViewModel in views
+   * Use `MainActor.run` for UI updates from async functions
+
+2. **SwiftLint Integration**:
+   * Install SwiftLint (via Homebrew or SPM)
+   * Create `.swiftlint.yml` configuration file
+   * Configure at least 5 rules (e.g., line length, force unwrapping, trailing whitespace, etc.)
+   * Fix all SwiftLint warnings in your code
+   * Add SwiftLint to Xcode build phase (optional but recommended)
+
+3. **External Framework Integration**:
+   * Choose ONE networking framework:
+     * **Alamofire** (recommended)
+     * **Moya** (wrapper around Alamofire)
+     * Or any other networking framework of your choice
+   * Add framework via Swift Package Manager
+   * Refactor network requests to use chosen framework
+   * Remove direct URLSession usage (or keep it if you prefer native solution)
+
+4. **Code Structure**:
+   * Organize files into folders:
+     * `Models/` - Data models
+     * `ViewModels/` - ViewModels
+     * `Views/` - SwiftUI views
+   * Use `// MARK:` comments to organize code sections
+   * Follow Swift naming conventions
+
+5. **ViewModel Requirements**:
+   * `WeatherViewModel` should handle:
+     * Fetching weather data
+     * Managing loading state (`@Published var isLoading`)
+     * Error handling (`@Published var errorMessage`)
+     * City search functionality
+   * All UI-related state should be `@Published` properties
+   * Use `await MainActor.run { }` for UI updates from async functions
+
+6. **View Requirements**:
+   * Views should be simple and focused on UI only
+   * Use `@StateObject` for ViewModel
+   * Observe ViewModel's `@Published` properties
+   * Handle loading, error, and success states
+   * No business logic in Views
+
+7. **Code Quality**:
+   * All code should pass SwiftLint checks
+   * Use meaningful variable and function names
+   * Add comments for complex logic
+   * Follow MVVM pattern strictly
+   * No business logic in Views
+
+8. **Bonus Challenges**:
+   * Add unit tests for ViewModel
+   * Create a separate `NetworkService` class for API calls
+   * Implement caching for weather data
+   * Add error handling for different error types
+   * Create custom SwiftLint rules
+
+### Submission Checklist:
+
+- [ ] Code is organized into MVVM structure (Models, ViewModels, Views folders)
+- [ ] SwiftLint is configured and all warnings fixed
+- [ ] External networking framework is integrated via SPM
+- [ ] All network code is in ViewModel
+- [ ] Views are clean and only handle UI
+- [ ] Code follows Swift style guidelines
+- [ ] Project structure is organized with folders
+- [ ] `.swiftlint.yml` file is included in repository
+
+---
+
+## 8. Resources
+
+* Apple Docs: ObservableObject
+* MVVM Pattern Guide
+* SwiftLint Documentation: https://github.com/realm/SwiftLint
+* Alamofire Documentation: https://github.com/Alamofire/Alamofire
+* Swift Package Manager Guide
+* Code organization best practices
